@@ -9,17 +9,17 @@ use quote::quote;
 use syn::{Data, DeriveInput, parse_macro_input};
 
 /// # Export TypeScript
-/// 
+///
 /// Exports the Struct or Enum to a TypeScript (.ts) file.
-/// 
+///
 /// The files that are generated are stored in `./types/*.ts`
-/// 
+///
 /// The following example generates the directory `types` then *2* files `User.ts` and `Role.ts`.
-/// 
+///
 /// It is important to note that when generated it is assumed that Role will ALSO be exported.
-/// 
-/// Usage: 
-/// 
+///
+/// Usage:
+///
 /// ```
 /// #[derive(ExportTypescript)]
 /// struct User {
@@ -27,39 +27,39 @@ use syn::{Data, DeriveInput, parse_macro_input};
 ///     pub display_name: string;
 ///     pub role: Role;
 /// }
-/// 
+///
 /// #[derive(ExportTypescript)]
 /// enum Role {
 ///     User,
 ///     Admin
 /// }
 /// ```
-/// 
+///
 /// Generated data:
-/// 
+///
 /// User.ts:
-/// 
+///
 /// ```
 /// import Role from './Role.ts';
-/// 
+///
 /// interface User {
 ///     uid: number;
 ///     display_name: string;
 ///     role: Role;
-/// } 
-/// 
+/// }
+///
 /// export default User;
-/// 
+///
 /// ```
-/// 
+///
 /// Role.ts:
-/// 
+///
 /// ```
 /// enum Role {
 ///     User,
 ///     Admin
 /// }
-/// 
+///
 /// export default Role;
 /// ```
 #[proc_macro_derive(ExportTypescript)]
@@ -116,7 +116,7 @@ pub fn export_typescript(input: TokenStream) -> TokenStream {
                 // [documentXXXX] pub
                 let field_type = field_type
                     .trim()
-                    .split_once("pub")
+                    .rsplit_once("pub")
                     .map(|(_, r)| {
                         r.split_once(":")
                             .map(|(l, r)| (l.trim(), r.trim()))
@@ -179,6 +179,12 @@ pub fn export_typescript(input: TokenStream) -> TokenStream {
                 .variants
                 .into_iter()
                 .map(|f| quote!(#f.ident).to_string())
+                .map(|s| {
+                    //remove the #doc comments and other macros
+                    let (_, name) = s.rsplit_once("]").unwrap();
+
+                    name.trim().to_string()
+                })
                 .map(|s| {
                     let spl = s.split_once(".");
 
