@@ -87,11 +87,15 @@ pub fn export_typescript(input: TokenStream) -> TokenStream {
     type_converter.insert("String", "string");
     type_converter.insert("str", "string");
     type_converter.insert("()", "void");
-    type_converter.insert("Vec", "Array");
     type_converter.insert("Option", "any");
     type_converter.insert("Result", "any");
     type_converter.insert("HashMap", "object");
     type_converter.insert("BTreeMap", "object");
+
+    let mut generic_type_converter = HashMap::new();
+    generic_type_converter.insert("Vec", "[]");
+
+    let get_accepted_type = |ty_name: &str| type_converter.get(ty_name);
 
     // a maps each field into a Vec<String> containing their field names.
     let mut field_data_string: String = match input.data {
@@ -139,15 +143,58 @@ pub fn export_typescript(input: TokenStream) -> TokenStream {
 
                 let (name, ty) = field_type.unwrap();
 
-                //convert our unsanitized Rust type to TypeScript.
-                let formal_name = if let Some(formal) = type_converter.get(ty) {
-                    formal.to_string()
-                } else {
-                    //import { X } from './X';
-                    let import_value = format!("import {} from './{}';", ty, ty);
-                    imports.insert(ty.to_string(), import_value);
+                fn rem_last_two<'a>(value: &'a str) -> &'a str {
+                    let mut chars = value.chars();
+                    chars.next_back();
+                    chars.next_back();
+                    chars.as_str()
+                }
 
-                    ty.to_string()
+                //transforms a generic single level type: Vec<String> -> (Vec, String)
+                let transform_type = |s: String| {
+                    // Vec < String >
+                    s.split_once("<").map(|(owner_ty, inner_unclean)| {
+                        let inner = rem_last_two(inner_unclean);
+
+                        (owner_ty.trim().to_string(), inner.trim().to_string())
+                    })
+                };
+
+                let formal_name = if ty.contains("<") {
+                    //transform the generic type to be a owner/inner type realtionship.
+                    //then map the inner type to be an accepeted type or use the name
+                    //then map the owner into a formatted string for ex. Vec<String> transforms into string[]
+                    //always fail if the generic cannot be convereted properly.
+                    let (owner, inner) = transform_type(ty.to_string())
+                        .map(|(owner, inner)| {
+                            let inner_ty = get_accepted_type(&inner)
+                                .map(|s| s.to_string())
+                                .unwrap_or(inner);
+
+                            (owner, inner_ty)
+                        })
+                        .expect("could not convert generic");
+
+                    let name: Option<String> = match owner.as_str() {
+                        "Vec" => Some(format!("{inner}[]")),
+                        _ => None,
+                    };
+
+                    name.expect("unsupported generic:\r\n\t- owner {owner}\r\n\t- inner {inner}")
+                } else {
+                    // ? handle non generics
+                    //convert our unsanitized Rust type to TypeScript.
+                    let non_generic_name = if let Some(formal) = get_accepted_type(ty) {
+                        formal.to_string()
+                    } else {
+                        //ty Vec < String >
+                        //import { X } from './X';
+                        let import_value = format!("import {} from './{}';", ty, ty);
+                        imports.insert(ty.to_string(), import_value);
+
+                        ty.to_string()
+                    };
+                    non_generic_name
                 };
 
                 output_types.push(format!("\t{name}: {formal_name};"));
@@ -181,7 +228,11 @@ pub fn export_typescript(input: TokenStream) -> TokenStream {
                 .map(|f| quote!(#f.ident).to_string())
                 .map(|s| {
                     //remove the #doc comments and other macros
-                    let (_, name) = s.rsplit_once("]").unwrap();
+                    let name = if let Some((_, doc_removed_name)) = s.rsplit_once("]") {
+                        doc_removed_name
+                    } else {
+                        &s
+                    };
 
                     name.trim().to_string()
                 })
