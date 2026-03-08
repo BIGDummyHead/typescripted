@@ -1,23 +1,55 @@
-# Typescripted
+# RS-TS
 
-A proc macro library that is able to convert structs and enums to Typescript files.
+RS-TS or "Rust to Typescript" is a proc macro library that is able to convert structs and enums to Typescript files.
 
-Generates a `types` folder and exports each exported type as `name.ts` into the types folder.
+It does this by generating a `types` folder and exports each exported type as `name.ts` into the folder.
 
 ## Usage
 
 ```rust
  #[derive(ExportTypescript)]
- struct User {
-     pub uid: i32,
-     pub display_name: string,
-     pub role: Role,
-     pub meta: Vec<String>
- }
+pub enum Roles {
+    User,
+    Admin,
+    SuperAdmin,
+}
 
- #[derive(ExportTypescript)]
- enum Role {
-     User,
-     Admin
- }
+#[derive(ExportTypescript)]
+pub struct SuperUser {
+    pub name: String,
+    pub age: i32,
+    pub roles: Roles,
+    pub meta: Vec<String>,
+}
 ```
+ 
+### Output 
+
+`./types/Roles.ts`
+
+```ts
+
+enum Roles {
+	User = "User",
+	Admin = "Admin",
+	SuperAdmin = "SuperAdmin"
+}
+
+export default Roles
+```
+
+`./types/SuperUser.ts`
+
+```ts
+import Roles from './Roles';
+
+interface SuperUser {
+	name: string;
+	age: number;
+	roles: Roles;
+	meta: Array<string>;
+}
+
+export default SuperUser
+```
+
